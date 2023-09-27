@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/NiuStar/OpenAIAuth/arkoselabs"
+
+	http "github.com/bogdanfinn/fhttp"
+	tls_client "github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
+	pkce "github.com/nirasan/go-oauth-pkce-code-verifier"
 	"io"
 	"net/url"
 	"regexp"
 	"strings"
-
-	http "github.com/bogdanfinn/fhttp"
-	tls_client "github.com/bogdanfinn/tls-client"
-	pkce "github.com/nirasan/go-oauth-pkce-code-verifier"
 )
 
 type Error struct {
@@ -40,12 +42,8 @@ type Authenticator struct {
 	URL                string
 	Verifier_code      string
 	Verifier_challenge string
-	AuthResult         AuthResult
-}
-
-type AuthResult struct {
-	AccessToken string `json:"access_token"`
-	PUID        string `json:"puid"`
+	AuthResult         interface{}
+	PUID               string
 }
 
 func NewAuthenticator(emailAddress, password, proxy string) *Authenticator {
@@ -58,7 +56,7 @@ func NewAuthenticator(emailAddress, password, proxy string) *Authenticator {
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(20),
-		tls_client.WithClientProfile(tls_client.Okhttp4Android13),
+		tls_client.WithClientProfile(profiles.Chrome_117),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar), // create cookieJar instance and pass it as argument
 		// Proxy
@@ -216,6 +214,11 @@ func (auth *Authenticator) partTwo(url string) *Error {
 }
 func (auth *Authenticator) partThree(state string) *Error {
 
+	token := arkoselabs.Instance().GetLoginArkoseToken()
+	if token == nil {
+		return NewError("part_three", 0, "Failed to get login arkose token", fmt.Errorf("error: Check details"))
+	}
+
 	url := fmt.Sprintf("https://auth0.openai.com/u/login/identifier?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
 
@@ -240,7 +243,7 @@ func (auth *Authenticator) partThree(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-
+	req.Header.Add("Cookie", "arkoseToken="+*token.Token)
 	resp, err := auth.Session.Do(req)
 	if err != nil {
 		return NewError("part_three", 0, "Failed to send request", err)
@@ -248,14 +251,14 @@ func (auth *Authenticator) partThree(state string) *Error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 302 || resp.StatusCode == 200 {
-		return auth.partFour(state)
+		return auth.partFour(state, *token.Token)
 	} else {
 		return NewError("part_three", resp.StatusCode, "Your email address is invalid.", fmt.Errorf("error: Check details"))
 
 	}
 
 }
-func (auth *Authenticator) partFour(state string) *Error {
+func (auth *Authenticator) partFour(state, token string) *Error {
 
 	url := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
@@ -278,6 +281,7 @@ func (auth *Authenticator) partFour(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	req.Header.Add("Cookie", "arkoseToken="+token)
 
 	resp, err := auth.Session.Do(req)
 	if err != nil {
@@ -382,24 +386,24 @@ func (auth *Authenticator) partSix(url, redirect_url string) *Error {
 		result_string := fmt.Sprintf("%v", result)
 		return NewError("part_six", 0, result_string, fmt.Errorf("missing access token"))
 	}
-	auth.AuthResult.AccessToken = result["accessToken"].(string)
+	auth.AuthResult = result
 
 	return nil
 }
 
 func (auth *Authenticator) GetAccessToken() string {
-	return auth.AuthResult.AccessToken
+	return auth.AuthResult.(map[string]interface{})["accessToken"].(string)
 }
 
 func (auth *Authenticator) GetPUID() (string, *Error) {
 	// Check if user has access token
-	if auth.AuthResult.AccessToken == "" {
+	if auth.AuthResult == nil || auth.AuthResult.(map[string]interface{})["accessToken"] == nil {
 		return "", NewError("get_puid", 0, "Missing access token", fmt.Errorf("error: Check details"))
 	}
 	// Make request to https://chat.openai.com/backend-api/models
 	req, _ := http.NewRequest("GET", "https://chat.openai.com/backend-api/models", nil)
 	// Add headers
-	req.Header.Add("Authorization", "Bearer "+auth.AuthResult.AccessToken)
+	req.Header.Add("Authorization", "Bearer "+auth.GetAccessToken())
 	req.Header.Add("User-Agent", auth.UserAgent)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Accept-Language", "en-US,en;q=0.9")
@@ -418,7 +422,7 @@ func (auth *Authenticator) GetPUID() (string, *Error) {
 	// Find `_puid` cookie in response
 	for _, cookie := range resp.Cookies() {
 		if cookie.Name == "_puid" {
-			auth.AuthResult.PUID = cookie.Value
+			auth.PUID = cookie.Value
 			return cookie.Value, nil
 		}
 	}
@@ -426,6 +430,6 @@ func (auth *Authenticator) GetPUID() (string, *Error) {
 	return "", NewError("get_puid", 0, "PUID cookie not found", fmt.Errorf("error: Check details"))
 }
 
-func (auth *Authenticator) GetAuthResult() AuthResult {
+func (auth *Authenticator) GetAuthResult() interface{} {
 	return auth.AuthResult
 }

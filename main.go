@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/NiuStar/OpenAIAuth/auth"
 
-	"github.com/acheong08/OpenAIAuth/auth"
+	"os"
 )
 
 func main() {
