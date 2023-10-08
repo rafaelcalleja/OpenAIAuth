@@ -17,6 +17,7 @@ func init() {
 	once.Do(func() {
 		instance = &Arkoselabs{}
 		instance.login_api = os.Getenv("login_api")
+		instance.platformLoginApi = os.Getenv("platform_login_api")
 		fmt.Println("api", instance.login_api)
 	})
 }
@@ -26,6 +27,7 @@ func Instance() *Arkoselabs {
 }
 
 type Arkoselabs struct {
-	ctx       context.Context
-	login_api string
+	ctx              context.Context
+	login_api        string
+	platformLoginApi string
 }

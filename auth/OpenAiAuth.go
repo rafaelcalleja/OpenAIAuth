@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/NiuStar/OpenAIAuth/arkoselabs"
-
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -44,6 +43,7 @@ type Authenticator struct {
 	Verifier_challenge string
 	AuthResult         interface{}
 	PUID               string
+	IsPlatform         bool
 }
 
 func NewAuthenticator(emailAddress, password, proxy string) *Authenticator {
@@ -214,7 +214,12 @@ func (auth *Authenticator) partTwo(url string) *Error {
 }
 func (auth *Authenticator) partThree(state string) *Error {
 
-	token := arkoselabs.Instance().GetLoginArkoseToken()
+	var token *arkoselabs.Result
+	if auth.IsPlatform {
+		token = arkoselabs.Instance().GetPlatformLoginArkoseToken()
+	} else {
+		token = arkoselabs.Instance().GetLoginArkoseToken()
+	}
 	if token == nil {
 		return NewError("part_three", 0, "Failed to get login arkose token", fmt.Errorf("error: Check details"))
 	}

@@ -22,6 +22,17 @@ func (a *Arkoselabs) GetLoginArkoseToken() *Result {
 	return nil
 }
 
+func (a *Arkoselabs) GetPlatformLoginArkoseToken() *Result {
+	if a.login_api != "" {
+		r1 := a.getArkoseToken(a.platformLoginApi)
+		fmt.Println("platformLoginApi:", a.platformLoginApi)
+		if r1 != nil {
+			return r1
+		}
+	}
+	return nil
+}
+
 func (a *Arkoselabs) getArkoseToken(api string) *Result {
 	method := "GET"
 
