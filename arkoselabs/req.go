@@ -22,9 +22,9 @@ func (a *Arkoselabs) GetLoginArkoseToken() *Result {
 	return nil
 }
 
-func (a *Arkoselabs) GetPlatformLoginArkoseToken() *Result {
+func (a *Arkoselabs) GetPlatformLoginArkoseToken(publicKey string) *Result {
 	if a.login_api != "" {
-		r1 := a.getArkoseToken(a.platformLoginApi)
+		r1 := a.getArkoseToken(fmt.Sprintf("%s?key=%s", a.platformLoginApi, publicKey))
 		fmt.Println("platformLoginApi:", a.platformLoginApi)
 		if r1 != nil {
 			return r1

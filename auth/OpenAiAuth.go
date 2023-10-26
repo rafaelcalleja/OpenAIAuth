@@ -214,16 +214,6 @@ func (auth *Authenticator) partTwo(url string) *Error {
 }
 func (auth *Authenticator) partThree(state string) *Error {
 
-	var token *arkoselabs.Result
-	if auth.IsPlatform {
-		token = arkoselabs.Instance().GetPlatformLoginArkoseToken()
-	} else {
-		token = arkoselabs.Instance().GetLoginArkoseToken()
-	}
-	if token == nil {
-		return NewError("part_three", 0, "Failed to get login arkose token", fmt.Errorf("error: Check details"))
-	}
-
 	url := fmt.Sprintf("https://auth0.openai.com/u/login/identifier?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
 
@@ -248,7 +238,7 @@ func (auth *Authenticator) partThree(state string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	req.Header.Add("Cookie", "arkoseToken="+*token.Token)
+
 	resp, err := auth.Session.Do(req)
 	if err != nil {
 		return NewError("part_three", 0, "Failed to send request", err)
@@ -256,14 +246,50 @@ func (auth *Authenticator) partThree(state string) *Error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 302 || resp.StatusCode == 200 {
-		return auth.partFour(state, *token.Token)
+		apiUrl := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
+		contentReq, _ := http.NewRequest("GET", apiUrl, nil)
+		for k, v := range headers {
+			contentReq.Header.Set(k, v)
+		}
+
+		resp, err := auth.Session.Do(contentReq)
+		if err != nil {
+			return NewError("part_two", 0, "Failed to make request", err)
+		}
+		defer resp.Body.Close()
+
+		body := bytes.NewBuffer(nil)
+		body.ReadFrom(resp.Body)
+
+		re := regexp.MustCompile(`var publicKey = '([^']+)'`)
+
+		match := re.FindStringSubmatch(body.String())
+
+		if len(match) < 2 {
+			return NewError("part_two_b", 0, "Failed getting key", err)
+		}
+
+		publicKey := match[1]
+		return auth.partFour(state, publicKey)
 	} else {
 		return NewError("part_three", resp.StatusCode, "Your email address is invalid.", fmt.Errorf("error: Check details"))
 
 	}
 
 }
-func (auth *Authenticator) partFour(state, token string) *Error {
+func (auth *Authenticator) partFour(state, publicKey string) *Error {
+
+	var token *arkoselabs.Result
+
+	if auth.IsPlatform {
+		token = arkoselabs.Instance().GetPlatformLoginArkoseToken(publicKey)
+	} else {
+		token = arkoselabs.Instance().GetLoginArkoseToken()
+	}
+
+	if token == nil {
+		return NewError("part_four", 0, "Failed to get login arkose token", fmt.Errorf("error: Check details"))
+	}
 
 	url := fmt.Sprintf("https://auth0.openai.com/u/login/password?state=%s", state)
 	emailURLEncoded := auth.URLEncode(auth.EmailAddress)
@@ -286,7 +312,7 @@ func (auth *Authenticator) partFour(state, token string) *Error {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	req.Header.Add("Cookie", "arkoseToken="+token)
+	req.Header.Add("Cookie", "arkoseToken="+*token.Token)
 
 	resp, err := auth.Session.Do(req)
 	if err != nil {
