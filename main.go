@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/NiuStar/OpenAIAuth/auth"
+	"github.com/rafaelcalleja/OpenAIAuth/auth"
 
 	"os"
 )

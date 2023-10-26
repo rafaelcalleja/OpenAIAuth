@@ -3,7 +3,7 @@ package arkoselabs
 import (
 	"context"
 	"fmt"
-	_ "github.com/NiuStar/OpenAIAuth/env"
+	_ "github.com/rafaelcalleja/OpenAIAuth/env"
 	"os"
 	"sync"
 )
