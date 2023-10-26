@@ -220,7 +220,24 @@ class Auth0:
             data=payload,
         )
         if response.status_code == 302 or response.status_code == 200:
-            self.__part_five(state=state)
+            apiUrl = f"https://auth0.openai.com/u/login/password?state={state}"
+
+            response = self.session.get(apiUrl, headers=headers)
+
+            if response.status_code != 200:
+                raise Exception("Failed to make request")
+
+            body = response.text
+
+            re_pattern = r"var publicKey = '([^']+)'"
+            match = re.search(re_pattern, body)
+
+            if not match:
+                raise Exception("[part_two_b] Failed getting key")
+
+            public_key = match.group(1)
+
+            self.__part_five(state=state, public_key=public_key)
         else:
             error = Error(
                 location="__part_four",
@@ -229,12 +246,15 @@ class Auth0:
             )
             raise error
 
-    def __part_five(self, state: str) -> None:
+    def __part_five(self, state: str, public_key: str) -> None:
         """
         We enter the password
         :param state:
         :return:
         """
+        token = self.session.get(
+            f"{os.environ.get('ARKOSE_TOKEN_URL')}/?key={public_key}"
+        )
 
         email_url_encoded = self.url_encode(self.email_address)
         password_url_encoded = self.url_encode(self.password)
@@ -249,6 +269,7 @@ class Auth0:
             "Referer": f"https://auth0.openai.com/u/login/password?state={state}",
             "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": "arkoseToken=" + token.json()['token']
         }
         response = self.session.post(
             url,
@@ -354,4 +375,4 @@ if __name__ == "__main__":
     openai = Auth0(email, password)
     print(openai.get_access_token())
 
-    print(openai.get_puid())
+    #print(openai.get_puid())

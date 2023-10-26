@@ -1,4 +1,4 @@
-module github.com/NiuStar/OpenAIAuth
+module github.com/rafaelcalleja/OpenAIAuth
 
 go 1.18
 
